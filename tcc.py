@@ -377,83 +377,6 @@ def collect_random_forest_retention_with_distance_correlation_results(entry_data
 
   results_df.to_csv('distance_correlation_results_' + entry_data + ".csv")
 
-# Método para prever métrica em um determinado dia ativo de cada usuário, para todo usuário que teve aquele dia ativo. Já remove usuários com menos dias ativos do que o dia a ser analisado
-# Parâmetros:
-  # df - dataframe
-  # day_to_predict - dia (d0, ... , dn) a ser predito
-  # csv_prefix - prefixo dos csvs salvos
-  # minimum_app_version - app version mínima
-  # minimum_days_since_creation -  mínimo de dias desde criação 
-# Regra de uso : o dataframe deve conter os campos user_id, first_app_version, lifetime_active_days, days_since_creation, e a coluna a ser predita.
-  # Além disso, deve conter campos com métricas diárias de todos os dias até o dia a ser analisado 
-  # (Ex.: daily_session_events_d0, daily_session_events_d1, daily_session_events_d2, ...)
-  # Estes campos, junto com first_app_version, serão usados como preditores de retenção dos usuários
-
-def predict_daily_metric_with_random_forest(df, column_to_predict, day_to_predict = 0, csv_prefix = "", minimum_app_version = "1.0", minimum_days_since_creation = 10, balance_database = True, split_ratio = .75, n_jobs=-1, n_estimators=1000) : 
-    # Removing unwanted data
-    df_temp = df[(df['first_app_version'] >= minimum_app_version) & (df['lifetime_active_days'] >= day_to_predict+1) & (df['days_since_creation'] >= minimum_days_since_creation)]
-    
-    # Select all daily metrics of interest
-    day = 0
-    metrics = []
-    while day <= day_to_predict :
-        for column in df_temp.columns :
-            if column.endswith("_d" + str(day)) and column != column_to_predict :
-                metrics.append(column) 
-        day += 1
-    # Appending all other metrics of interest
-    for metric in ['user_id', column_to_predict] :
-        metrics.append(metric)
-    df_temp = df_temp[metrics]
-    clf, features_importance_df, train, test, df_untrained, df_full, training_score, test_score, untrained_score, training_results, test_results, untrained_results = run_random_forest(df_temp, column_to_predict, csv_prefix)
-    test.to_csv(csv_prefix + "predict_" + column_to_predict + "_df_test_d" + str(day_to_predict) + ".csv")
-    train.to_csv(csv_prefix + "predict_" + column_to_predict + "_df_train_d" + str(day_to_predict) + ".csv")
-    df_untrained.to_csv(csv_prefix + "predict_" + column_to_predict + "_df_untrained_d" + str(day_to_predict) + ".csv")
-    df_full.to_csv(csv_prefix + "predict_" + column_to_predict + "_df_full_d" + str(day_to_predict) + ".csv")    
-    return clf, features_importance_df, train, test, df_untrained, df_full, training_score, test_score, untrained_score, training_results, test_results, untrained_results
-
-
-# Método que itera predict_daily_metric_with_random_forest para cada dia dentre os dias escolhidos (de 0 à days_to_predict)
-# IMPORTANTE!!! Caso seja desejado prever uma métrica para cada um dos dias ativos, column_to_predict deve terminar em "_d"!
-  # Exemplo: Prever retenção dia a dia -> column_to_predict = "retained_d" 
-def predict_metric_for_user_period_with_random_forest(df, column_to_predict, days_to_predict, csv_prefix = "", minimum_app_version = "1.0", minimum_days_since_creation = 10, balance_database = True, split_ratio = .75, n_jobs=-1, n_estimators=1000) :
-    day = 0
-    while day <= days_to_predict :
-      if column_to_predict.endswith("_d") :
-        predict_daily_metric_with_random_forest(df, column_to_predict + str(day), day, csv_prefix, minimum_app_version, minimum_days_since_creation, balance_database, split_ratio, n_jobs, n_estimators)
-      else :
-        predict_daily_metric_with_random_forest(df, column_to_predict, day, csv_prefix, minimum_app_version, minimum_days_since_creation, balance_database, split_ratio, n_jobs, n_estimators)        
-      day += 1
-
-# DEPRACATED
-# Roda método de random forest entre cada coluna e a coluna a ser predita (AVISO : não performa tão bem quanto rodar com todas as colunas)
-def run_random_forest_between_columns(df, column_to_predict, split_ratio = .75, n_jobs=-1, n_estimators=1000):
-
-    for column in df : 
-        if column != column_to_predict and column != 'is_train':
-            df_2 = df[[column, column_to_predict]]
-            # Spliting the data frame
-            df_2['is_train'] = np.random.uniform(0, 1, len(df_2)) <= split_ratio
-            train, test = df_2[df_2['is_train']==True], df_2[df_2['is_train']==False]
-
-            # Defining features (all but column_to_predict)
-            features = train.columns.difference([column_to_predict]).difference(['is_train']).difference(['user_id'])
-            # Construct the classifier
-            if features.size > 0 :
-                clf = RandomForestClassifier(n_jobs=n_jobs, n_estimators=n_estimators)
-
-                # Build a forest of trees from the training set (train[features], train[column_to_predict])
-                clf.fit(train[features], train[column_to_predict])
-
-                # Predict class for test[features]. 
-                #The predicted class of an input sample is a vote by the trees in the forest, weighted by their probability estimates.
-                preds = clf.predict(train[features])
-                # Computes a single table to compare actual state to predicted state
-                results = pd.crosstab(test[column_to_predict], preds, rownames=['Actual State'], colnames=['Predicted State'])
-
-                # Computes the mean accuracy on the given test data and labels 
-                score = clf.score(train[features], train[column_to_predict], )
-    return clf, score
 
 # Retorna um df apenas com colunas de correlação de distância maior ou igual à requerida
 def df_with_selected_correlation_only(df, column_to_predict, required_correlation) :
@@ -464,6 +387,23 @@ def df_with_selected_correlation_only(df, column_to_predict, required_correlatio
                 df_with_selected_correlation.drop(column, axis=1, inplace=True)
     return df_with_selected_correlation
 
+
+def cluster_with_hdbscan_after_PCA(entry_data) :
+  df = pd.read_csv(entry_data + ".csv")
+  clustering_df = pd.DataFrame()
+  clustering_df['PC_1'] = df['PC_1']
+  clustering_df['PC_2'] = df['PC_2']
+  cluster_size = int(len(df)/4)
+  clusterer = hdbscan.HDBSCAN(min_cluster_size)
+  clusterer.fit(clustering_df)
+  labels = clusterer.labels_
+  print("Number of clusters found: ", labels.max()+1)
+  probabilities = clusterer.probabilities_
+  clustering_df['labels'] = labels
+  clustering_df['probabilities'] = probabilities
+  clustering_df['user_id'] = df['user_id']
+  clustering_df.to_csv(entry_data + '_hdbsca_clustering_results.csv')
+  return clustering_df
 
 def prepare_all_data() :
   prepare_entry_data("bear_evolution_d0")
@@ -487,13 +427,12 @@ def join_all_data() :
   join_prepared_data("dog_evolution")
   join_prepared_data("dolphin_evolution")
 
-def collect_random_forest_with_pca_results_full() :
+def collect_random_forest_retention_with_pca_results_full() :
   collect_random_forest_retention_with_pca_results("bear_evolution_d0_joined")
   collect_random_forest_retention_with_pca_results("bear_evolution_d1_joined")
   collect_random_forest_retention_with_pca_results("bear_evolution_d2_joined")
   collect_random_forest_retention_with_pca_results("bear_evolution_d3_joined")
   collect_random_forest_retention_with_pca_results("bear_evolution_d4_joined")
-def  collect_random_forest_retention_with_pca_results() :
   collect_random_forest_retention_with_pca_results("dog_evolution_d0_joined")
   collect_random_forest_retention_with_pca_results("dog_evolution_d1_joined")
   collect_random_forest_retention_with_pca_results("dog_evolution_d2_joined")
@@ -522,13 +461,29 @@ def collect_random_forest_retention_with_distance_correlation_results_full() :
   collect_random_forest_retention_with_distance_correlation_results("dolphin_evolution_d3_joined")
   collect_random_forest_retention_with_distance_correlation_results("dolphin_evolution_d4_joined")
 
-
+    
+def cluster_all_data() :
+  cluster_with_hdbscan_after_PCA("bear_evolution_d0_joined")
+  cluster_with_hdbscan_after_PCA("bear_evolution_d1_joined")
+  cluster_with_hdbscan_after_PCA("bear_evolution_d2_joined")
+  cluster_with_hdbscan_after_PCA("bear_evolution_d3_joined")
+  cluster_with_hdbscan_after_PCA("bear_evolution_d4_joined")
+  cluster_with_hdbscan_after_PCA("dog_evolution_d0_joined")
+  cluster_with_hdbscan_after_PCA("dog_evolution_d1_joined")
+  cluster_with_hdbscan_after_PCA("dog_evolution_d2_joined")
+  cluster_with_hdbscan_after_PCA("dog_evolution_d3_joined")
+  cluster_with_hdbscan_after_PCA("dog_evolution_d4_joined")
+  cluster_with_hdbscan_after_PCA("dolphin_evolution_d0_joined")
+  cluster_with_hdbscan_after_PCA("dolphin_evolution_d1_joined")
+  cluster_with_hdbscan_after_PCA("dolphin_evolution_d2_joined")
+  cluster_with_hdbscan_after_PCA("dolphin_evolution_d3_joined")
+  cluster_with_hdbscan_after_PCA("dolphin_evolution_d4_joined")
 
 if __name__ == '__main__':
   
   # Preparing the data takes a very long time
   #prepare_all_data()
   join_all_data()  
-  print("yo")  
-  print("yo")  
-  #prepare_entry_date("bear_evolution_d4")
+  collect_random_forest_retention_with_pca_results_full() 
+  collect_random_forest_retention_with_distance_correlation_results_full() 
+  cluster_all_data()
