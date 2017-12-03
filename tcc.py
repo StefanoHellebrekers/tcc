@@ -3,6 +3,7 @@ from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
+import hdbscan
 pd.options.mode.chained_assignment = None
 
 """
@@ -329,6 +330,7 @@ def predict_retention (df, balance_database = True, split_ratio = .75, n_jobs=-1
 
 
 def collect_random_forest_retention_with_pca_results(entry_data, balance_database = True, split_ratio = .75, n_jobs=-1, n_estimators=1000):
+  print("Random forest with pca for " + entry_data)
   run_PCA(entry_data)
   transformed_df = pd.read_csv('pca_transformed_' + entry_data + ".csv")
   transformed_df = transformed_df.drop("Unnamed: 0", axis = 1)
@@ -393,8 +395,8 @@ def cluster_with_hdbscan_after_PCA(entry_data) :
   clustering_df = pd.DataFrame()
   clustering_df['PC_1'] = df['PC_1']
   clustering_df['PC_2'] = df['PC_2']
-  cluster_size = int(len(df)/4)
-  clusterer = hdbscan.HDBSCAN(min_cluster_size)
+  cluster_size = int(len(df)/6)
+  clusterer = hdbscan.HDBSCAN(cluster_size)
   clusterer.fit(clustering_df)
   labels = clusterer.labels_
   print("Number of clusters found: ", labels.max()+1)
@@ -426,6 +428,24 @@ def join_all_data() :
   join_prepared_data("bear_evolution")
   join_prepared_data("dog_evolution")
   join_prepared_data("dolphin_evolution")
+
+
+def run_PCA_full() :
+  run_PCA("bear_evolution_d0_joined")
+  run_PCA("bear_evolution_d1_joined")
+  run_PCA("bear_evolution_d2_joined")
+  run_PCA("bear_evolution_d3_joined")
+  run_PCA("bear_evolution_d4_joined")
+  run_PCA("dog_evolution_d0_joined")
+  run_PCA("dog_evolution_d1_joined")
+  run_PCA("dog_evolution_d2_joined")
+  run_PCA("dog_evolution_d3_joined")
+  run_PCA("dog_evolution_d4_joined")
+  run_PCA("dolphin_evolution_d0_joined")
+  run_PCA("dolphin_evolution_d1_joined")
+  run_PCA("dolphin_evolution_d2_joined")
+  run_PCA("dolphin_evolution_d3_joined")
+  run_PCA("dolphin_evolution_d4_joined")
 
 def collect_random_forest_retention_with_pca_results_full() :
   collect_random_forest_retention_with_pca_results("bear_evolution_d0_joined")
@@ -460,24 +480,23 @@ def collect_random_forest_retention_with_distance_correlation_results_full() :
   collect_random_forest_retention_with_distance_correlation_results("dolphin_evolution_d2_joined")
   collect_random_forest_retention_with_distance_correlation_results("dolphin_evolution_d3_joined")
   collect_random_forest_retention_with_distance_correlation_results("dolphin_evolution_d4_joined")
-
     
 def cluster_all_data() :
-  cluster_with_hdbscan_after_PCA("bear_evolution_d0_joined")
-  cluster_with_hdbscan_after_PCA("bear_evolution_d1_joined")
-  cluster_with_hdbscan_after_PCA("bear_evolution_d2_joined")
-  cluster_with_hdbscan_after_PCA("bear_evolution_d3_joined")
-  cluster_with_hdbscan_after_PCA("bear_evolution_d4_joined")
-  cluster_with_hdbscan_after_PCA("dog_evolution_d0_joined")
-  cluster_with_hdbscan_after_PCA("dog_evolution_d1_joined")
-  cluster_with_hdbscan_after_PCA("dog_evolution_d2_joined")
-  cluster_with_hdbscan_after_PCA("dog_evolution_d3_joined")
-  cluster_with_hdbscan_after_PCA("dog_evolution_d4_joined")
-  cluster_with_hdbscan_after_PCA("dolphin_evolution_d0_joined")
-  cluster_with_hdbscan_after_PCA("dolphin_evolution_d1_joined")
-  cluster_with_hdbscan_after_PCA("dolphin_evolution_d2_joined")
-  cluster_with_hdbscan_after_PCA("dolphin_evolution_d3_joined")
-  cluster_with_hdbscan_after_PCA("dolphin_evolution_d4_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_bear_evolution_d0_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_bear_evolution_d1_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_bear_evolution_d2_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_bear_evolution_d3_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_bear_evolution_d4_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dog_evolution_d0_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dog_evolution_d1_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dog_evolution_d2_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dog_evolution_d3_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dog_evolution_d4_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dolphin_evolution_d0_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dolphin_evolution_d1_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dolphin_evolution_d2_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dolphin_evolution_d3_joined")
+  cluster_with_hdbscan_after_PCA("pca_transformed_dolphin_evolution_d4_joined")
 
 if __name__ == '__main__':
   
