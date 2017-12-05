@@ -5,47 +5,8 @@ import numpy as np
 from sklearn.decomposition import PCA
 import hdbscan
 pd.options.mode.chained_assignment = None
-
-"""
-Derived From:
-http://jpktd.blogspot.com/2012/06/non-linear-dependence-measures-distance.html
-"""
-def dist(x, y):
-  #1d only
-  # Calculate the absolute value element-wise
-  # Returns: An ndarray containing the absolute value of each element in `x`
-  return np.abs(x[:, None] - y)
-
-def d_n(x):
-  d = dist(x, x)
-  dn = d - d.mean(0) - d.mean(1)[:,None] + d.mean() 
-  return dn
-
-def dcov_all(x, y):
-  # Coerce type to numpy array if not already of that type.
-  try: x.shape
-  except AttributeError: x = np.array(x)
-  try: y.shape
-  except AttributeError: y = np.array(y)
-  
-  dnx = d_n(x)
-  dny = d_n(y)
-    
-  denom = np.product(dnx.shape)
-  dc = np.sqrt((dnx * dny).sum() / denom)
-  dvx = np.sqrt((dnx**2).sum() / denom)
-  dvy = np.sqrt((dny**2).sum() / denom)
-  dr = dc / (np.sqrt(dvx) * np.sqrt(dvy))
-  return dc, dr, dvx, dvy
-
-def distance_correlation(x,y):
-  return dcov_all(x,y)[1]
-
-
-def get_df_from_query(query, project="parabolic-water-186711"):
-    print("Doing query")  
-    df = pd.io.gbq.read_gbq(query, project)
-    return df
+import warnings
+warnings.filterwarnings('ignore')
 
 
 def prepare_entry_data(entry_data):
@@ -167,6 +128,44 @@ def join_prepared_data(table_name) :
   d4 = pd.merge(d3, d4, on='user_id', how='inner')
   d4.to_csv(table_name + '_d4_joined.csv')
 
+
+"""
+Derived From:
+http://jpktd.blogspot.com/2012/06/non-linear-dependence-measures-distance.html
+"""
+def dist(x, y):
+  #1d only
+  # Calculate the absolute value element-wise
+  # Returns: An ndarray containing the absolute value of each element in `x`
+  return np.abs(x[:, None] - y)
+
+def d_n(x):
+  d = dist(x, x)
+  dn = d - d.mean(0) - d.mean(1)[:,None] + d.mean() 
+  return dn
+
+def dcov_all(x, y):
+  # Coerce type to numpy array if not already of that type.
+  try: x.shape
+  except AttributeError: x = np.array(x)
+  try: y.shape
+  except AttributeError: y = np.array(y)
+  
+  dnx = d_n(x)
+  dny = d_n(y)
+    
+  denom = np.product(dnx.shape)
+  dc = np.sqrt((dnx * dny).sum() / denom)
+  dvx = np.sqrt((dnx**2).sum() / denom)
+  dvy = np.sqrt((dny**2).sum() / denom)
+  dr = dc / (np.sqrt(dvx) * np.sqrt(dvy))
+  return dc, dr, dvx, dvy
+
+def distance_correlation(x,y):
+  return dcov_all(x,y)[1]
+
+
+
 def run_PCA(entry_data) :
 
   df = pd.read_csv(entry_data + ".csv")
@@ -220,8 +219,7 @@ def run_PCA(entry_data) :
   # training_score - accuracy do modelo em relação à base de treino
   # test_score - accuracy do modelo em relação à base de teste
   # untrained_score - accuracy do modelo em relação à base não treinada
-def run_random_forest(df, column_to_predict, balance_database = True, split_ratio = .75, n_jobs=-1, n_estimators=1000):
-  print("Random Forest")
+def run_random_forest(df, data_name, column_to_predict, balance_database = True, split_ratio = .75, n_jobs=-1, n_estimators=1000):
   # Dataframe temporário, sob o qual serão feitas todas modificações (para não alterar o df original)
   df_temp = df
   # Balancear a base, caso balance_database seja True
@@ -248,8 +246,10 @@ def run_random_forest(df, column_to_predict, balance_database = True, split_rati
 
 
   # Definir as features (variáveis preditoras)
-  features = df_temp.columns.difference([column_to_predict]).difference(['is_train']).difference(['user_id']).difference(['may_train']).difference(['activity_country']).difference(['last_activity_date']).difference(['activity_date']).difference(['first_app_version']).difference(['last_app_version']).difference(['activity_country'])
-
+  features = df_temp.columns
+  for column in features :
+    if (column == column_to_predict) | column.startswith("user_id") | column.startswith("may_train") | column.startswith("activity_country") | column.startswith("is_train") | column.startswith("first_app_version") | column.startswith("last_app_version") | column.startswith("activity_date") | column.startswith("last_activity_date") | column.startswith("Unnamed: 0") :
+      features = features.drop(column)
 
   # Construir o classificador
   clf = RandomForestClassifier(n_jobs=n_jobs, n_estimators=n_estimators)
@@ -314,21 +314,30 @@ def run_random_forest(df, column_to_predict, balance_database = True, split_rati
 
   # Salvar todos os dataframes, com resultados, em um csv
   df_full = test.append(train).append(df_untrained)
-  #df_full.to_csv('random_forest_results_' + entry_data + '.csv')
+  df_full.to_csv('random_forest_results_' + data_name + '.csv')
 
   return clf, features_importance_df, train, test, df_untrained, df_full, training_score, test_score, untrained_score, training_results, test_results, untrained_results
 
 
 # Método para prever retenção
-def predict_retention (df, balance_database = True, split_ratio = .75, n_jobs=-1, n_estimators=1000) :
+def predict_retention (df, data_name, balance_database = True, split_ratio = .75, n_jobs=-1, n_estimators=1000) :
   df.fillna(0, inplace = True)
   df.loc[df.last_activity_date > df.activity_date, 'retained?'] = 1
   df.loc[df.last_activity_date <= df.activity_date, 'retained?'] = 0
 
-  clf, features_importance_df, train, test, df_untrained, df_full, training_score, test_score, untrained_score, training_results, test_results, untrained_results = run_random_forest(df, 'retained?', balance_database, split_ratio, n_jobs, n_estimators)
+  clf, features_importance_df, train, test, df_untrained, df_full, training_score, test_score, untrained_score, training_results, test_results, untrained_results = run_random_forest(df, data_name,'retained?', balance_database, split_ratio, n_jobs, n_estimators)
   return clf, features_importance_df, train, test, df_untrained, df_full, training_score, test_score, untrained_score, training_results, test_results, untrained_results
 
-
+def save_result_columns_from_random_forest(entry_data) :
+    df = pd.read_csv("random_forest_results_" + entry_data + ".csv")
+    df_new = pd.DataFrame()
+    df_new['user_id'] = df['user_id']
+    df_new['data_type'] = df['data_type']
+    df_new['predicted_probabilitie_0'] = df['predicted_probabilitie_0']
+    df_new['predicted_probabilitie_1'] = df['predicted_probabilitie_1']
+    df_new['predicted_value'] = df['predicted_value']
+    df_new['retained?'] = df['retained?']
+    df_new.to_csv("random_forest_result_columns_" + entry_data + ".csv")
 def collect_random_forest_retention_with_pca_results(entry_data, balance_database = True, split_ratio = .75, n_jobs=-1, n_estimators=1000):
   print("Random forest with pca for " + entry_data)
   run_PCA(entry_data)
